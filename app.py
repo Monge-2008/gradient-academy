@@ -113,9 +113,20 @@ def complete_module():
     key=learner_key(); mid=int((request.json or {}).get('module_id',0)); module=next((m for m in MODULES if m['id']==mid),None)
     if not module: return jsonify(error='Module introuvable'),404
     con=connect(); rows=con.execute('SELECT score FROM attempts WHERE learner_key=? AND module_id=?',(key,mid)).fetchall()
-    # Require at least one attempt per lesson and a mean score of 7/10 to validate.
-    by_lesson=con.execute('SELECT lesson_index,AVG(score) avg,COUNT(*) n FROM attempts WHERE learner_key=? AND module_id=? GROUP BY lesson_index',(key,mid)).fetchall()
-    enough=len(by_lesson)>=len(module['lessons']) and all(r['avg']>=7 for r in by_lesson)
+    # Validate using the latest score for each lesson, not the average of all historical attempts.
+    # Earlier mistakes remain in the report but do not permanently penalize a learner who has improved.
+    by_lesson=con.execute("""
+        SELECT a.lesson_index, a.score
+        FROM attempts AS a
+        JOIN (
+            SELECT lesson_index, MAX(id) AS latest_id
+            FROM attempts
+            WHERE learner_key=? AND module_id=?
+            GROUP BY lesson_index
+        ) AS latest ON a.id=latest.latest_id
+        WHERE a.learner_key=? AND a.module_id=?
+    """,(key,mid,key,mid)).fetchall()
+    enough=len(by_lesson)>=len(module['lessons']) and all(float(r['score'])>=7 for r in by_lesson)
     if enough: con.execute('INSERT OR IGNORE INTO completions(learner_key,module_id,completed_at) VALUES(?,?,?)',(key,mid,datetime.now(timezone.utc).isoformat())); con.commit()
     con.close(); return jsonify(ok=enough, message='Module validé.' if enough else 'Pour valider, réponds à chaque exercice du module et vise une moyenne d’au moins 7/10 pour chaque exercice. Tu peux réessayer autant que nécessaire.')
 
