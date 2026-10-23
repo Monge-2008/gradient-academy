@@ -126,9 +126,11 @@ def complete_module():
         ) AS latest ON a.id=latest.latest_id
         WHERE a.learner_key=? AND a.module_id=?
     """,(key,mid,key,mid)).fetchall()
-    enough=len(by_lesson)>=len(module['lessons']) and all(float(r['score'])>=7 for r in by_lesson)
+    latest_scores={int(r['lesson_index']):float(r['score']) for r in by_lesson}
+    failed_lessons=[i for i in range(len(module['lessons'])) if latest_scores.get(i,0)<7]
+    enough=not failed_lessons
     if enough: con.execute('INSERT OR IGNORE INTO completions(learner_key,module_id,completed_at) VALUES(?,?,?)',(key,mid,datetime.now(timezone.utc).isoformat())); con.commit()
-    con.close(); return jsonify(ok=enough, message='Module validé.' if enough else 'Pour valider, réponds à chaque exercice du module et vise une moyenne d’au moins 7/10 pour chaque exercice. Tu peux réessayer autant que nécessaire.')
+    con.close(); return jsonify(ok=enough, failed_lessons=failed_lessons, message='Module validé.' if enough else 'Il reste des exercices à consolider. Tu vas revenir directement au premier exercice à reprendre.')
 
 @app.get('/api/report')
 def report():
