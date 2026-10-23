@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: gradient-academy
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GRADIENT_DB_PATH
+        value: /var/data/gradient_academy.db
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      # Ajoute OPENAI_API_KEY dans le tableau de bord Render, jamais dans Git.
+    disk:
+      name: gradient-academy-data
+      mountPath: /var/data
+      sizeGB: 1
